@@ -1,0 +1,50 @@
+{
+    "query": "SELECT ?value WHERE { ?value <http://dbpedia.org/property/firstTeam> <http://dbpedia.org/resource/Cosworth> . }",
+    "log": [
+        {
+            "query": "select distinct ?uri\nwhere\n{\n    ?uri <http://dbpedia.org/property/wikiPageUsesTemplate> <http://dbpedia.org/resource/Template:Infobox_Grand_Prix_race_report>.\n    ?uri <http://dbpedia.org/ontology/wikiPageWikiLink> <http://dbpedia.org/resource/McLaren>.\n    ?uri <http://dbpedia.org/property/firstTeam> <http://dbpedia.org/resource/Cosworth>.\n}",
+            "runtime": {
+                "steps": 4,
+                "requests_n": 12,
+                "requests_p": 12
+            },
+            "perf": {
+                "end": 1466592717.8425753,
+                "start": 1466592667.5638232
+            },
+            "eval": {
+                "unexpected": [],
+                "prec": 1.0,
+                "missing": [
+                    "http://dbpedia.org/resource/1969_International_Gold_Cup",
+                    "http://dbpedia.org/resource/1972_Italian_Republic_Grand_Prix"
+                ],
+                "recall": 0.9534883720930233,
+                "f1": 0.9761904761904762
+            },
+            "added_positive": [
+                "http://dbpedia.org/resource/1969_International_Gold_Cup",
+                "http://dbpedia.org/resource/1972_Italian_Republic_Grand_Prix"
+            ]
+        },
+        {
+            "query": "select distinct ?uri\nwhere\n{\n    ?uri <http://dbpedia.org/property/wikiPageUsesTemplate> <http://dbpedia.org/resource/Template:Infobox_Grand_Prix_race_report>.\n    ?uri <http://dbpedia.org/property/firstTeam> <http://dbpedia.org/resource/Cosworth>.\n}",
+            "runtime": {
+                "steps": 1,
+                "requests_n": 3,
+                "requests_p": 3
+            },
+            "perf": {
+                "end": 1466592720.6994314,
+                "start": 1466592717.9037826
+            },
+            "eval": {
+                "unexpected": [],
+                "prec": 1.0,
+                "missing": [],
+                "recall": 1.0,
+                "f1": 1.0
+            }
+        }
+    ]
+}
