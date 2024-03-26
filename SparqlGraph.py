@@ -6,8 +6,10 @@ from rdflib import URIRef, Literal, BNode
 
 
 class SparqlGraph:
-    def __init__(self, endpoint):
+    def __init__(self, endpoint, timeout, logger):
         self.endpoint = endpoint
+        self.timeout = timeout
+        self.logger = logger
 
     @staticmethod
     def _read_binding(doc):
@@ -53,24 +55,32 @@ class SparqlGraph:
     def _query(self, text):
         # print(text)
         data = urllib.parse.urlencode({'query': text, 'format': 'text/xml'}).encode('utf-8')
-        return urllib.request.urlopen(self.endpoint, data)
+        return urllib.request.urlopen(self.endpoint, data, timeout=self.timeout)
 
     def ask(self, text):
-        with self._query(text) as f:
-            text = f.read().decode('utf-8').strip().lower()
-            if text == "true":
-                return True
-            elif text == "false":
-                return False
-            else:
-                raise Exception()
+        try:
+            with self._query(text) as f:
+                text = f.read().decode('utf-8').strip().lower()
+                if text == "true":
+                    return True
+                elif text == "false":
+                    return False
+                else:
+                    raise Exception()
+        except Exception as e:
+            self.logger.error(f"text:{text}; error: {e}")
+            return False
 
     def select(self, text):
-        with self._query(text) as f:
-            doc = defusedxml.pulldom.parse(f)
-            for event, node in doc:
-                if event == pulldom.START_ELEMENT and node.tagName == 'result':
-                    yield SparqlGraph._read_result(doc)
+        try:
+            with self._query(text) as f:
+                doc = defusedxml.pulldom.parse(f)
+                for event, node in doc:
+                    if event == pulldom.START_ELEMENT and node.tagName == 'result':
+                        yield SparqlGraph._read_result(doc)
+        except Exception as e:
+            self.logger.error(f"text:{text}; error: {e}")
+            return 
 
     def predicates(self, subject):
         for row in self.select('select distinct ?p where {{ {} ?p [].}}'.format(subject.n3())):
@@ -147,12 +157,20 @@ class CachingGraph:
 
 
 if __name__ == '__main__':
-    g = SparqlGraph('http://dbpedia.org/sparql')
-    ha = URIRef('http://dbpedia.org/resource/Harps_and_Angels')
-    rev = URIRef('http://dbpedia.org/property/rev')
-    l = Literal('Blender', lang='en')
-    am = URIRef('http://dbpedia.org/resource/AllMusic')
-    # for i in g.subjects(rev, l):
-    #     print(type(i), i)
-    # print(g.ask('ask where {<http://dbpedia.org/resource/Harps_and_Angels> <http://dbpedia.org/property/rev> "Blender".}'))
-    print((ha, rev, ha) in g)
+    # g = SparqlGraph('http://dbpedia.org/sparql')
+    # ha = URIRef('http://dbpedia.org/resource/Harps_and_Angels')
+    # rev = URIRef('http://dbpedia.org/property/rev')
+    # l = Literal('Blender', lang='en')
+    # am = URIRef('http://dbpedia.org/resource/AllMusic')
+    # # for i in g.subjects(rev, l):
+    # #     print(type(i), i)
+    # # print(g.ask('ask where {<http://dbpedia.org/resource/Harps_and_Angels> <http://dbpedia.org/property/rev> "Blender".}'))
+    # print((ha, rev, ha) in g)
+
+    g = SparqlGraph("http://210.28.134.34:8890/sparql")
+    ha = URIRef('http://rdf.freebase.com/ns/m.07_nf')
+    rev = URIRef('http://rdf.freebase.com/ns/time.event.end_date')
+    l = Literal('1975-04-30', datatype="http://www.w3.org/2001/XMLSchema#date")
+    for i in g.subjects(rev, l):
+        print(type(i), i)
+    print(ha in g.subjects(rev, l))

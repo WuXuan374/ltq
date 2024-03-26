@@ -23,13 +23,13 @@ class Engine:
         self.ex_positive = None
         self.ex_negative = None
         self.random = Random(0xbeef)
-    
+
     def _sparql_list(self, l, sep=" "):
         return sep.join([item.n3() for item in l]) # n3() 是 URIRef 的方法，检查 URI 是否合法
     
     def _sparql_positive(self, sep=" "):
         return self._sparql_list(self.positive, sep)
-    
+  
     def _sparql_negative(self, sep=" "):
         return self._sparql_list(self.negative, sep)
     
@@ -54,12 +54,12 @@ class Engine:
             'n_neg': len(neg),
             's_root': s_gen[root],
             't_root': t_gen[root],
-            'having': '?recall >= .99',
             'tp': 'count(distinct ?s)',
             'fp': 'count(distinct ?t)',
         }
-        args['measure'] = "({tp}/({tp}+{fp}) as ?precision) ({tp}/{n_pos} as ?recall) (2/((1/({tp}/({tp}+{fp})))+(1/({tp}/{n_pos}))) as ?measure)".format_map(
+        args['measure'] = "({tp}/({tp}+{fp}) as ?precision) ({tp}/{n_pos} as ?recall) (2*({tp}/({tp}+{fp}))*({tp}/{n_pos}) / ({tp}/({tp}+{fp}) + {tp}/{n_pos}) as ?measure)".format_map(
             args)
+        args['having'] = "{tp}/{n_pos} >= .99".format_map(args)
         return args
     
     def p(self, root):
@@ -106,7 +106,7 @@ class Engine:
                 }}
                 group by ?p ?o
                 having ({having})
-                order by desc(?measure)
+                order by desc(2*({tp}/({tp}+{fp}))*({tp}/{n_pos}) / ({tp}/({tp}+{fp}) + {tp}/{n_pos}))
         '''.format_map(self._args(root))
         for row in self.graph.select(query):
             s = TriplePatternSelector(root, row['p'], row['o'])
@@ -132,7 +132,7 @@ class Engine:
                 }}
                 group by ?p ?o
                 having ({having})
-                order by desc(?measure)
+                order by desc(2*({tp}/({tp}+{fp}))*({tp}/{n_pos}) / ({tp}/({tp}+{fp}) + {tp}/{n_pos}))
         '''.format_map(self._args(root))
         for row in self.graph.select(query):
             s = TriplePatternSelector(row['o'], row['p'], root)
@@ -250,13 +250,23 @@ class Engine:
             }}
         '''.format_map(self._args(Selector.placeholder))
         # assert len(result) == 1
+        # try:
+        #     result = [row for row in self.graph.select(query)]
+        #     if 'measure' not in result[0]:  # znaczy obliczenia sie nie powiodly
+        #         return 0
+        #     else:
+        #         return result[0]['measure'].value
+        # except:
+        #     return 0
         try:
             result = [row for row in self.graph.select(query)]
+            assert len(result) == 1
             if 'measure' not in result[0]:  # znaczy obliczenia sie nie powiodly
                 return 0
             else:
                 return result[0]['measure'].value
-        except:
+        except Exception as e:
+            print(f"query: {query}; exception: {e}")
             return 0
 
     def hypothesis_good_enough(self):

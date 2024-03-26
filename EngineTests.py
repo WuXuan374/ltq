@@ -34,7 +34,7 @@ def run(positive, negative, target):
     positive = urize(positive)
     negative = urize(negative)
     target = urize(target)
-    graph = SparqlGraph('https://semantic.cs.put.poznan.pl/blazegraph/sparql')
+    graph = SparqlGraph('https://dbpedia.org/sparql')
     eng = Engine(graph, positive, negative)
     while not eng.hypothesis_good_enough():
         eng.step()
