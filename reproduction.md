@@ -25,6 +25,8 @@ Engine 类包装了构造查询所需的函数，包括所需要的 SPARQL 查�
 evaluate():
 - f1 的计算改为 2 * P * R / (P+R), 不然容易出现 Division By Zero
 - 另外在各种除法里面，补充 1e-10, 避免除数为 0
+
+补充每个样本的查询超时时间限制
 ## EngingFreebase.py
 Selector.py: 我认为这个文件中的代码和知识库无关，无需修改
 SparqlGraph.py: 类似我们的 execute_query() 方法，我认为同样无需修改
@@ -37,5 +39,7 @@ SparqlGraph.py: 类似我们的 execute_query() 方法，我认为同样无需�
     - 感觉这边可能有问题
 - 调用 new_examples() 的地方, 逻辑保持不变
 - _hypothesis_quality()
+- 每个查询中，补充谓词的前缀约束
+    - FILTER (strstarts(str(?p),"http://rdf.freebase.com/ns/")) .
 
 测试: EngineTestsFreebase.py

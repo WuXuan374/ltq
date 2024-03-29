@@ -54,33 +54,63 @@ class Engine:
             'n_neg': len(neg),
             's_root': s_gen[root],
             't_root': t_gen[root],
-            'tp': 'count(distinct ?s)',
-            'fp': 'count(distinct ?t)',
+            'tp': '?tp',
+            'fp': '?fp',
         }
         args['measure'] = "({tp}/({tp}+{fp}) as ?precision) ({tp}/{n_pos} as ?recall) (2*({tp}/({tp}+{fp}))*({tp}/{n_pos}) / ({tp}/({tp}+{fp}) + {tp}/{n_pos}) as ?measure)".format_map(
             args)
-        args['having'] = "{tp}/{n_pos} >= .99".format_map(args)
+        args['having'] = "(count(distinct ?s))/{n_pos} >= .99".format_map(args) # 这个条件就要求了 ?tp != 0, 因为 n_pos 一定是 >= 1 的
         return args
     
     def p(self, root):
+        # query = '''
+        #         select distinct ?p (count(distinct ?s) as ?tp) (count(distinct ?t) as ?fp) {measure}
+        #         where
+        #         {{
+        #             {{
+        #                 {s_selector}
+        #                 {s_root} ?p [] .
+        #                 values ?s {{ {positive} }}
+        #                 FILTER (strstarts(str(?p),"http://rdf.freebase.com/ns/")) .
+        #             }}
+        #             union
+        #             {{
+        #                 {t_selector}
+        #                 {t_root} ?p [] .
+        #                 values ?t {{ {negative} }}
+        #                 FILTER (strstarts(str(?p),"http://rdf.freebase.com/ns/")) .
+        #             }}
+        #         }}
+        #         group by ?p
+        #         having ({having})
+        # '''.format_map(self._args(root))
+        '''改成子查询的写法，避免部分 ?tp = 0 导致的整个查询出现 Division By Zero 错误'''
         query = '''
-                select distinct ?p (count(distinct ?s) as ?tp) (count(distinct ?t) as ?fp) {measure}
-                where
+                select distinct ?p ?tp ?fp {measure} 
+                where 
                 {{
                     {{
-                        {s_selector}
-                        {s_root} ?p [] .
-                        values ?s {{ {positive} }}
-                    }}
-                    union
-                    {{
-                        {t_selector}
-                        {t_root} ?p [] .
-                        values ?t {{ {negative} }}
+                        select distinct ?p (count(distinct ?s) as ?tp) (count(distinct ?t) as ?fp)
+                        where
+                        {{
+                            {{
+                                {s_selector}
+                                {s_root} ?p [] .
+                                values ?s {{ {positive} }}
+                                FILTER (strstarts(str(?p),"http://rdf.freebase.com/ns/")) .
+                            }}
+                            union
+                            {{
+                                {t_selector}
+                                {t_root} ?p [] .
+                                values ?t {{ {negative} }}
+                                FILTER (strstarts(str(?p),"http://rdf.freebase.com/ns/")) .
+                            }}
+                        }}
+                        group by ?p
+                        having ({having})
                     }}
                 }}
-                group by ?p
-                having ({having})
         '''.format_map(self._args(root))
         for row in self.graph.select(query):
             s = TriplePatternSelector(root, row['p'], Variable())
@@ -88,25 +118,56 @@ class Engine:
                 yield s, row
     
     def po(self, root):
+        # query = '''
+        #         select distinct ?p ?o (count(distinct ?s) as ?tp) (count(distinct ?t) as ?fp) {measure}
+        #         where
+        #         {{
+        #             {{
+        #                 {s_selector}
+        #                 {s_root} ?p ?o .
+        #                 values ?s {{ {positive} }}
+        #                 FILTER (strstarts(str(?p),"http://rdf.freebase.com/ns/")) .
+        #             }}
+        #             union
+        #             {{
+        #                 {t_selector}
+        #                 {t_root} ?p ?o .
+        #                 values ?t {{ {negative} }}
+        #                 FILTER (strstarts(str(?p),"http://rdf.freebase.com/ns/")) .
+        #             }}
+        #         }}
+        #         group by ?p ?o
+        #         having ({having})
+        #         order by desc(2*({tp}/({tp}+{fp}))*({tp}/{n_pos}) / ({tp}/({tp}+{fp}) + {tp}/{n_pos}))
+        # '''.format_map(self._args(root))
+
         query = '''
-                select distinct ?p ?o (count(distinct ?s) as ?tp) (count(distinct ?t) as ?fp) {measure}
+                select distinct ?p ?o ?tp ?fp {measure} 
                 where
                 {{
                     {{
-                        {s_selector}
-                        {s_root} ?p ?o .
-                        values ?s {{ {positive} }}
-                    }}
-                    union
-                    {{
-                        {t_selector}
-                        {t_root} ?p ?o .
-                        values ?t {{ {negative} }}
+                        select distinct ?p ?o (count(distinct ?s) as ?tp) (count(distinct ?t) as ?fp)
+                        where 
+                        {{
+                            {{
+                                {s_selector}
+                                {s_root} ?p ?o .
+                                values ?s {{ {positive} }}
+                                FILTER (strstarts(str(?p),"http://rdf.freebase.com/ns/")) .
+                            }}
+                            union
+                            {{
+                                {t_selector}
+                                {t_root} ?p ?o .
+                                values ?t {{ {negative} }}
+                                FILTER (strstarts(str(?p),"http://rdf.freebase.com/ns/")) .
+                            }}
+                        }}
+                        group by ?p ?o
+                        having ({having})
                     }}
                 }}
-                group by ?p ?o
-                having ({having})
-                order by desc(2*({tp}/({tp}+{fp}))*({tp}/{n_pos}) / ({tp}/({tp}+{fp}) + {tp}/{n_pos}))
+                order by desc(?measure)
         '''.format_map(self._args(root))
         for row in self.graph.select(query):
             s = TriplePatternSelector(root, row['p'], row['o'])
@@ -115,25 +176,53 @@ class Engine:
     
     def sp(self, root):
         query = '''
-                select distinct ?p ?o (count(distinct ?s) as ?tp) (count(distinct ?t) as ?fp) {measure}
+                select distinct ?p ?o ?tp ?fp {measure} 
                 where
                 {{
                     {{
-                        {s_selector}
-                        ?o ?p {s_root} .
-                        values ?s {{ {positive} }}
-                    }}
-                    union
-                    {{
-                        {t_selector}
-                        ?o ?p {t_root} .
-                        values ?t {{ {negative} }}
+                        select distinct ?p ?o (count(distinct ?s) as ?tp) (count(distinct ?t) as ?fp)
+                        where
+                        {{
+                            {{
+                                {s_selector}
+                                ?o ?p {s_root} .
+                                values ?s {{ {positive} }}
+                                FILTER (strstarts(str(?p),"http://rdf.freebase.com/ns/")) .
+                            }}
+                            union
+                            {{
+                                {t_selector}
+                                ?o ?p {t_root} .
+                                values ?t {{ {negative} }}
+                                FILTER (strstarts(str(?p),"http://rdf.freebase.com/ns/")) .
+                            }}
+                        }}
+                        group by ?p ?o
+                        having ({having})
                     }}
                 }}
-                group by ?p ?o
-                having ({having})
-                order by desc(2*({tp}/({tp}+{fp}))*({tp}/{n_pos}) / ({tp}/({tp}+{fp}) + {tp}/{n_pos}))
+                order by desc(?measure)
         '''.format_map(self._args(root))
+        # query = '''
+        #         select distinct ?p ?o (count(distinct ?s) as ?tp) (count(distinct ?t) as ?fp) {measure}
+        #         where
+        #         {{
+        #             {{
+        #                 {s_selector}
+        #                 ?o ?p {s_root} .
+        #                 values ?s {{ {positive} }}
+        #             }}
+        #             union
+        #             {{
+        #                 {t_selector}
+        #                 ?o ?p {t_root} .
+        #                 values ?t {{ {negative} }}
+        #             }}
+        #         }}
+        #         group by ?p ?o
+        #         having ({having})
+        #         order by desc(2*({tp}/({tp}+{fp}))*({tp}/{n_pos}) / ({tp}/({tp}+{fp}) + {tp}/{n_pos}))
+        # '''.format_map(self._args(root))
         for row in self.graph.select(query):
             s = TriplePatternSelector(row['o'], row['p'], root)
             if s not in self.hypothesis:
@@ -143,37 +232,78 @@ class Engine:
         args = self._args(root)
         for op in '<=', '>=':
             args['op'] = op
+            # query = '''
+            #             select distinct ?p ?l (count(distinct ?s) as ?tp) (count(distinct ?t) as ?fp) {measure}
+            #             where
+            #             {{
+            #                 {{
+            #                     {s_selector}
+            #                     {s_root} ?p ?xl.
+            #                     values ?s {{ {positive} }}
+            #                     filter(isLiteral(?xl))
+            #                 }}
+            #                 union
+            #                 {{
+            #                     {t_selector}
+            #                     {t_root} ?p ?xl.
+            #                     values ?t {{ {negative} }}
+            #                     filter(isLiteral(?xl))
+            #                 }}
+            #                 filter(?xl {op} ?l)
+            #                 {{
+            #                     select distinct ?p ?l
+            #                     where
+            #                     {{
+            #                         {s_selector}
+            #                         {s_root} ?p ?l.
+            #                         values ?s {{ {positive} }}
+            #                         filter(isLiteral(?l))
+            #                     }}
+            #                 }}
+            #             }}
+            #             group by ?p ?l
+            #             having ({having})
+            # '''.format_map(args)
             query = '''
-                        select distinct ?p ?l (count(distinct ?s) as ?tp) (count(distinct ?t) as ?fp) {measure}
-                        where
+                    select distinct ?p ?l ?tp ?fp {measure} 
+                    where
+                    {{
                         {{
+                            select distinct ?p ?l (count(distinct ?s) as ?tp) (count(distinct ?t) as ?fp)
+                            where
                             {{
-                                {s_selector}
-                                {s_root} ?p ?xl.
-                                values ?s {{ {positive} }}
-                                filter(isLiteral(?xl))
-                            }}
-                            union
-                            {{
-                                {t_selector}
-                                {t_root} ?p ?xl.
-                                values ?t {{ {negative} }}
-                                filter(isLiteral(?xl))
-                            }}
-                            filter(?xl {op} ?l)
-                            {{
-                                select distinct ?p ?l
-                                where
                                 {{
                                     {s_selector}
-                                    {s_root} ?p ?l.
+                                    {s_root} ?p ?xl.
                                     values ?s {{ {positive} }}
-                                    filter(isLiteral(?l))
+                                    filter(isLiteral(?xl))
+                                    FILTER (strstarts(str(?p),"http://rdf.freebase.com/ns/")) .
+                                }}
+                                union
+                                {{
+                                    {t_selector}
+                                    {t_root} ?p ?xl.
+                                    values ?t {{ {negative} }}
+                                    filter(isLiteral(?xl))
+                                    FILTER (strstarts(str(?p),"http://rdf.freebase.com/ns/")) .
+                                }}
+                                filter(?xl {op} ?l)
+                                {{
+                                    select distinct ?p ?l
+                                    where
+                                    {{
+                                        {s_selector}
+                                        {s_root} ?p ?l.
+                                        values ?s {{ {positive} }}
+                                        filter(isLiteral(?l))
+                                        FILTER (strstarts(str(?p),"http://rdf.freebase.com/ns/")) .
+                                    }}
                                 }}
                             }}
+                            group by ?p ?l
+                            having ({having})
                         }}
-                        group by ?p ?l
-                        having ({having})
+                    }}
             '''.format_map(args)
             for row in self.graph.select(query):
                 s = FilterOpSelector(root, row['p'], op, row['l'])
@@ -199,7 +329,7 @@ class Engine:
     def _new_negative_examples(self):
         selector = self.hypothesis[:-1].sparql(NamesGenerator('?uri', '?plus'))
         if len(selector.strip()) == 0:
-            selector = '?uri ?p ?o.'
+            selector = '?uri ?p ?o' # 测试过了，这里不能加 filter, 加了就超时，离谱
         args = {
             'known': self._sparql_list(itertools.chain(self.positive, self.negative), sep=", "),
             'selector': selector,
@@ -234,20 +364,45 @@ class Engine:
         return query
 
     def _hypothesis_quality(self):
+        # query = '''
+        #     select distinct (count(distinct ?s) as ?tp) (count(distinct ?t) as ?fp) {measure}
+        #     where
+        #     {{
+        #         {{
+        #             {s_selector}
+        #             values ?s {{ {positive} }}
+        #         }}
+        #         union
+        #         {{
+        #             {t_selector}
+        #             values ?t {{ {negative} }}
+        #         }}
+        #     }}
+        # '''.format_map(self._args(Selector.placeholder))
+        
+        # ?tp = 0 会导致计算 f1 时出现 Division By Zero
         query = '''
-            select distinct (count(distinct ?s) as ?tp) (count(distinct ?t) as ?fp) {measure}
+            select distinct ?tp ?fp {measure} 
             where
             {{
+                filter (?tp > 0) 
                 {{
-                    {s_selector}
-                    values ?s {{ {positive} }}
-                }}
-                union
-                {{
-                    {t_selector}
-                    values ?t {{ {negative} }}
+                    select distinct (count(distinct ?s) as ?tp) (count(distinct ?t) as ?fp)
+                    where
+                    {{
+                        {{
+                            {s_selector}
+                            values ?s {{ {positive} }}
+                        }}
+                        union
+                        {{
+                            {t_selector}
+                            values ?t {{ {negative} }}
+                        }}
+                    }}
                 }}
             }}
+            
         '''.format_map(self._args(Selector.placeholder))
         # assert len(result) == 1
         # try:
@@ -342,6 +497,7 @@ class Engine:
                 self.hypothesis.pop()
             if self.hypothesis.pop() is None:
                 if restarted:
-                    raise Exception("Uh-huh, and what now?")
+                    # raise Exception("Uh-huh, and what now?")
+                    return # 抛出异常的话，就不会记录之前存下来的查询了
                 else:
                     restarted = True

@@ -30,12 +30,20 @@ def evaluate(graph:SparqlGraph, query, target):
     return {'prec': prec, 'recall': recall, 'f1': 2*prec*recall / max([(prec + recall), 1e-10]), 'missing': list(missing),
             'unexpected': list(unexpected)}
 
-def benchmark(q, negative, sparql_graph, logger):
+def get_shortened_evaluation_result(e):
+    return {
+        'prec': e["prec"], 'recall': e["recall"], 'f1': e["f1"], 'missing': list(e["missing"])[:5],
+        'unexpected': list(e["unexpected"])[:5]
+    }
+
+def benchmark(q, negative, sparql_graph, logger, detection_timeout):
+    example_start_time = time.time()
     target = list(set(q["answer"]))
     if len(target) == 0:
         return None
-    sample_num = min(len(target), 5)
-    positive = random.sample(target, sample_num)
+    positive = set(target) # 一开始就把所有答案给出
+    # sample_num = min(len(target), 5)
+    # positive = random.sample(target, sample_num)
     negative = negative - set(target)
     assert len(negative) > 0
     eng = Engine(sparql_graph, positive, list(negative))
@@ -44,19 +52,10 @@ def benchmark(q, negative, sparql_graph, logger):
         n_steps = 0
         n_pos = 0
         n_neg = 0
-        start = time.time()
-        # while not eng.hypothesis_good_enough():
-        #     eng.step()
-        #     n_steps += 1
-        #     labels = []
-        #     n_pos += len(eng.ex_positive)
-        #     n_neg += len(eng.ex_negative)
-        #     for ex in itertools.chain(eng.ex_positive, eng.ex_negative):
-        #         labels.append(ex['uri'] in target)
-        #     eng.label_examples(labels[:len(eng.ex_positive)], labels[len(eng.ex_positive):])
-        
-        # 改成 Do-While 的形式; 否则第一次执行总是报错
-        while True:
+        iteration_start = time.time()
+        if iteration_start - example_start_time > detection_timeout:
+            return log
+        while not eng.hypothesis_good_enough():
             eng.step()
             n_steps += 1
             labels = []
@@ -65,16 +64,18 @@ def benchmark(q, negative, sparql_graph, logger):
             for ex in itertools.chain(eng.ex_positive, eng.ex_negative):
                 labels.append(ex['uri'] in target)
             eng.label_examples(labels[:len(eng.ex_positive)], labels[len(eng.ex_positive):])
-            if eng.hypothesis_good_enough():
+            if time.time() - example_start_time > detection_timeout:
                 break
-        end = time.time()
+        
+        iteration_end = time.time()
+        # evaluation 这边耗时不会太长，就不做检查了
         logger.info("Starting evaluation")
         e = evaluate(sparql_graph, eng.final_query(), target)
-        log_line = {'eval': e,
+        log_line = {'eval': get_shortened_evaluation_result(e),
                     'runtime': {'steps': n_steps, 'requests_p': n_pos, 'requests_n': n_neg},
                     'query': eng.final_query(),
-                    'perf': {'start': start, 'end': end}}
-        logger.info(e)
+                    'perf': {'start': iteration_start, 'end': iteration_end}}
+        logger.info(get_shortened_evaluation_result(e))
         missing = list(e['missing'])
         ue = list(e['unexpected'])
         if len(missing) > 0:
@@ -136,9 +137,9 @@ def main():
     args = dict()
     args["data_file"] = "data/webqsp_test_0_1000_linking.json"
     args["output_path"] = 'data/webqsp_test_0_1000_output.json'
-    args["log_path"] = 'data/webqsp_test_0_1000_log.json'
+    args["log_path"] = 'data/webqsp_test_0_1000_log.txt'
     args["sparql_timeout"] = 60
-    args["detection_timeout"] = 240 
+    args["detection_timeout"] = 240
     args["endpoint_url"] = SPARQL_wrapper_path_official
     logger = setup_custom_logger(args["log_path"])
     logger.info("arguments")
@@ -146,18 +147,17 @@ def main():
         logger.info(f"{key}: {value}")
     queries, negative_examples = load_queries(args["data_file"])
     sparql_graph = SparqlGraph(args["endpoint_url"], args["sparql_timeout"], logger)
-    for q in queries[5:]:
-        logger.info(q)
+    for q in queries[:1]:
+        logger.info(q['golden_sparql_query'])
         data = {'query': q}
         try:
-            log = benchmark(q, negative_examples, sparql_graph, logger)
+            log = benchmark(q, negative_examples, sparql_graph, logger, args["detection_timeout"])
             data['log'] = log
         except Exception as e:
             data['exception'] = str(e)
         with open(args["output_path"], 'at') as f:
             print(json.dumps(data), file=f)
         logger.info("=============================================")
-        break
 
 if __name__ == '__main__':
     main()

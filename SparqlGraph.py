@@ -68,7 +68,7 @@ class SparqlGraph:
                 else:
                     raise Exception()
         except Exception as e:
-            self.logger.error(f"text:{text}; error: {e}")
+            # self.logger.error(f"text:{text}; error: {e}")
             return False
 
     def select(self, text):
