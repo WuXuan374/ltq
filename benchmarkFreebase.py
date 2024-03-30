@@ -146,8 +146,9 @@ def main():
     for (key, value) in args.items():
         logger.info(f"{key}: {value}")
     queries, negative_examples = load_queries(args["data_file"])
+    logger.info(f"negative_examples: {negative_examples}")
     sparql_graph = SparqlGraph(args["endpoint_url"], args["sparql_timeout"], logger)
-    for q in queries[:1]:
+    for q in queries:
         logger.info(q['golden_sparql_query'])
         data = {'query': q}
         try:
