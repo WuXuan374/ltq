@@ -338,7 +338,7 @@ class Engine:
             while len(self.hypothesis) > 0:
                 p, n = self.new_examples()
                 if len(p) > 0 and len(n) > 0:
-                    break # 能够生成新的 example --> 我们的场景下主要是负例，则会对当前 hypothesis 进行 refine
+                    break 
                 else:
                     self.hypothesis.pop()
             print(self.hypothesis.sparql())
