@@ -51,3 +51,7 @@ Selector.py: 我认为这个文件中的代码和知识库无关，无需修改
 有一些抛出异常的地方，改成 print
 
 测试: EngineTestsFreebase.py
+
+## SparqlGraph.py
+补充了 logger
+增加了 SPARQL 查询的重试机制，对抗 SPARQL 服务不稳定的情况

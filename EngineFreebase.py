@@ -280,9 +280,9 @@ class Engine:
             }}
             
         '''.format_map(self._args(Selector.placeholder))
-        try:
+        try: # 有可能结果为空，故补充 try-catch
             result = [row for row in self.graph.select(query)]
-            assert len(result) == 1
+            assert len(result) == 1, "Empty execution result"
             if 'measure' not in result[0]:  # znaczy obliczenia sie nie powiodly
                 return 0
             else:

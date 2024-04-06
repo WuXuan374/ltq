@@ -72,15 +72,17 @@ class SparqlGraph:
             return False
 
     def select(self, text):
-        try:
-            with self._query(text) as f:
-                doc = defusedxml.pulldom.parse(f)
-                for event, node in doc:
-                    if event == pulldom.START_ELEMENT and node.tagName == 'result':
-                        yield SparqlGraph._read_result(doc)
-        except Exception as e:
-            self.logger.error(f"text:{text}; error: {e}")
-            return 
+        for idx in range(4):
+            try:
+                with self._query(text) as f:
+                    doc = defusedxml.pulldom.parse(f)
+                    for event, node in doc:
+                        if event == pulldom.START_ELEMENT and node.tagName == 'result':
+                            yield SparqlGraph._read_result(doc)
+                break
+            except Exception as e:
+                self.logger.error(f"idx: {idx}; text:{text}; error: {e}")
+        return
 
     def predicates(self, subject):
         for row in self.select('select distinct ?p where {{ {} ?p [].}}'.format(subject.n3())):

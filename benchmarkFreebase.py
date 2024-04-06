@@ -20,7 +20,10 @@ def load_json(fname, mode="r", encoding="utf8"):
 
 def evaluate(graph:SparqlGraph, query, target):
     target = set(target)
-    result = set([row['uri'] for row in graph.select(query)])
+    result = set([
+        row['uri'] for row in graph.select(query)
+        if ('uri' in row)
+    ]) # 规避 exception
     missing = target - result
     unexpected = result - target
     tp = len(result & target)
@@ -103,6 +106,7 @@ def load_queries(src_path):
 
     for item in tqdm(src_data):
         processed_item = {
+            "qid": item["qid"],
             "answer": [
                 URIRef(f"{NS_PREFIX}{ans['mid']}")
                 for ans in item["answer"]
@@ -132,12 +136,12 @@ def setup_custom_logger(log_file_name):
 
     return logger
 
-def main():
+def webqsp_main():
     random.seed(12345)
     args = dict()
-    args["data_file"] = "data/webqsp_test_0_1000_linking.json"
-    args["output_path"] = 'data/webqsp_test_0_1000_output.json'
-    args["log_path"] = 'data/webqsp_test_0_1000_log.txt'
+    args["data_file"] = "data/webqsp/webqsp_test_0_1000_linking.json"
+    args["output_path"] = 'data/webqsp/webqsp_test_0_1000_output.json'
+    args["log_path"] = 'data/webqsp/webqsp_test_0_1000_log.txt'
     args["sparql_timeout"] = 60
     args["detection_timeout"] = 240
     args["endpoint_url"] = SPARQL_wrapper_path_official
@@ -160,5 +164,64 @@ def main():
             print(json.dumps(data), file=f)
         logger.info("=============================================")
 
+def grailqa_main():
+    random.seed(12345)
+    args = dict()
+    args["data_file"] = "data/grailqa/grailqa_v1.0_dev_0_1000_linking.json"
+    args["output_path"] = 'data/grailqa/grailqa_dev_0_1000_output.json'
+    args["log_path"] = 'data/grailqa/grailqa_dev_0_1000_log.txt'
+    args["sparql_timeout"] = 60
+    args["detection_timeout"] = 240
+    args["endpoint_url"] = SPARQL_wrapper_path_dkilab
+    logger = setup_custom_logger(args["log_path"])
+    logger.info("arguments")
+    for (key, value) in args.items():
+        logger.info(f"{key}: {value}")
+    queries, negative_examples = load_queries(args["data_file"])
+    logger.info(f"negative_examples: {negative_examples}")
+    sparql_graph = SparqlGraph(args["endpoint_url"], args["sparql_timeout"], logger)
+    for q in queries:
+        logger.info(q['golden_sparql_query'])
+        data = {'query': q}
+        try:
+            log = benchmark(q, negative_examples, sparql_graph, logger, args["detection_timeout"])
+            data['log'] = log
+        except Exception as e:
+            data['exception'] = str(e)
+        with open(args["output_path"], 'at') as f:
+            print(json.dumps(data), file=f)
+        logger.info("=============================================")
+
+def cwq_main():
+    random.seed(12345)
+    args = dict()
+    args["data_file"] = "data/cwq/cwq_test_0_1000_linking.json"
+    args["output_path"] = 'data/cwq/cwq_test_0_1000_output.json'
+    args["log_path"] = 'data/cwq/cwq_test_0_1000_log.txt'
+    args["sparql_timeout"] = 60
+    args["detection_timeout"] = 240
+    args["endpoint_url"] = SPARQL_wrapper_path_official
+    logger = setup_custom_logger(args["log_path"])
+    logger.info("arguments")
+    for (key, value) in args.items():
+        logger.info(f"{key}: {value}")
+    queries, negative_examples = load_queries(args["data_file"])
+    logger.info(f"negative_examples: {negative_examples}")
+    sparql_graph = SparqlGraph(args["endpoint_url"], args["sparql_timeout"], logger)
+    for q in queries:
+        logger.info(q['golden_sparql_query'])
+        data = {'query': q}
+        try:
+            log = benchmark(q, negative_examples, sparql_graph, logger, args["detection_timeout"])
+            data['log'] = log
+        except Exception as e:
+            data['exception'] = str(e)
+        with open(args["output_path"], 'at') as f:
+            print(json.dumps(data), file=f)
+        logger.info("=============================================")
+
+
 if __name__ == '__main__':
-    main()
+    # webqsp_main()
+    grailqa_main()
+    # cwq_main()
